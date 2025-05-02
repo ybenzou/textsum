@@ -1,0 +1,99 @@
+from fastapi import APIRouter
+from .schemas import SummarizationRequest, SummarizationResponse
+from .model_loader import load_model
+from transformers import AutoTokenizer
+from concurrent.futures import ThreadPoolExecutor
+import os, json
+
+router = APIRouter()
+model_cache = {}
+tokenizer_cache = {}
+
+# 读取注册表
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+REGISTRY_PATH = os.path.join(BASE_DIR, "model/version_registry.json")
+with open(REGISTRY_PATH, "r") as f:
+    MODEL_REGISTRY = json.load(f)["models"]
+
+def get_model_and_tokenizer(model_name: str):
+    if model_name not in model_cache:
+        model_cache[model_name] = load_model(model_name)
+    
+    if model_name not in tokenizer_cache:
+        model_path = os.path.abspath(os.path.join(BASE_DIR, MODEL_REGISTRY[model_name]["path"]))
+        tokenizer_cache[model_name] = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+    
+    return model_cache[model_name], tokenizer_cache[model_name]
+
+def recursive_summarize_blocks(summarizer, tokenizer, texts, max_token_len=1024, max_depth=5, do_sample=False):
+    current_depth = 1
+    hierarchy = [texts.copy()]
+    current_blocks = texts.copy()
+
+    if not current_blocks:
+        return "", hierarchy, 0
+
+    while current_depth <= max_depth:
+        groups = []
+        group = []
+        token_len = 0
+
+        for t in current_blocks:
+            l = len(tokenizer(t)["input_ids"])
+            if token_len + l > max_token_len and group:
+                groups.append(group)
+                group = []
+                token_len = 0
+            group.append(t)
+            token_len += l
+        if group:
+            groups.append(group)
+
+        if len(groups) == 1 and len(tokenizer("\n".join(groups[0]))["input_ids"]) <= max_token_len:
+            break
+
+        compressed = []
+        for g in groups:
+            merged = "\n".join(g)
+            try:
+                out = summarizer(merged, max_length=512, min_length=100, do_sample=do_sample)
+                compressed.append(out[0]["summary_text"])
+            except Exception as e:
+                print(f"[ERROR] summarizing group failed: {e}")
+                continue
+
+        if not compressed:
+            break
+
+        hierarchy.append(compressed)
+        current_blocks = compressed
+        current_depth += 1
+
+    return current_blocks[0] if current_blocks else "", hierarchy, current_depth
+
+@router.post("/summarize_recursive", response_model=SummarizationResponse)
+def summarize_recursive(req: SummarizationRequest):
+    model_name = req.model_name or "t5_small"
+    summarizer, tokenizer = get_model_and_tokenizer(model_name)
+
+    paragraphs = [p.strip() for p in req.text.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return SummarizationResponse(summary="", details=[], depth=0, hierarchy=[])
+
+    # Level 1 并行
+    def summarize_one(para):
+        return summarizer(para, max_length=256, min_length=30, do_sample=req.do_sample)[0]["summary_text"]
+
+    with ThreadPoolExecutor(max_workers=min(len(paragraphs), os.cpu_count() or 4)) as executor:
+        level1_summaries = list(executor.map(summarize_one, paragraphs))
+
+    final_summary, hierarchy, depth = recursive_summarize_blocks(
+        summarizer, tokenizer, level1_summaries, do_sample=req.do_sample
+    )
+
+    return SummarizationResponse(
+        summary=final_summary,
+        details=level1_summaries,
+        depth=depth,
+        hierarchy=hierarchy
+    )
