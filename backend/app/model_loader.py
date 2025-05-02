@@ -1,5 +1,6 @@
 import os
 import json
+import torch
 from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 from peft import PeftModel
 
@@ -22,7 +23,17 @@ def load_model(model_name: str):
     model = AutoModelForSeq2SeqLM.from_pretrained(model_path, local_files_only=True)
 
     if "lora" in model_name.lower():
-        model = PeftModel.from_pretrained(model, model_path)
+        model = PeftModel.from_pretrained(model, model_path, local_files_only=True)
 
-    pipe = pipeline("summarization", model=model, tokenizer=tokenizer)
+    # ✅ 自动检测是否有 GPU
+    device = 0 if torch.cuda.is_available() else -1
+
+    pipe = pipeline(
+        "summarization",
+        model=model,
+        tokenizer=tokenizer,
+        device=device,
+        truncation=True,
+        model_kwargs={"max_length": 512}
+    )
     return pipe
