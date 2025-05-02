@@ -25,7 +25,7 @@ def get_model_and_tokenizer(model_name: str):
 
     return model_cache[model_name], tokenizer_cache[model_name]
 
-def recursive_summarize_blocks(summarizer, tokenizer, texts, max_token_len=1024, max_depth=5, do_sample=False):
+def recursive_summarize_blocks(summarizer, tokenizer, texts, max_token_len=512, max_depth=5, do_sample=False):
     current_depth = 1
     hierarchy = [[{"text": t} for t in texts]]
     current_blocks = texts.copy()
@@ -38,20 +38,21 @@ def recursive_summarize_blocks(summarizer, tokenizer, texts, max_token_len=1024,
         group = []
         token_len = 0
 
+        # ✅ 智能合并多个 blocks，逼近 token 上限
         for i, t in enumerate(current_blocks):
             l = len(tokenizer(t)["input_ids"])
-            if token_len + l > max_token_len and group:
-                groups.append(group)
-                group = []
-                token_len = 0
-            group.append((i, t))
-            token_len += l
+            if token_len + l > max_token_len:
+                if group:
+                    groups.append(group)
+                group = [(i, t)]
+                token_len = l
+            else:
+                group.append((i, t))
+                token_len += l
         if group:
             groups.append(group)
 
-        if len(groups) == 1 and len(tokenizer("\n".join(t for _, t in groups[0]))["input_ids"]) <= max_token_len:
-            break
-
+        # ✅ 若只剩 1 个 group，仍然走一轮 summary（确保 summary 被调用）
         compressed = []
         for g in groups:
             indices, texts_in_group = zip(*g)
@@ -73,6 +74,11 @@ def recursive_summarize_blocks(summarizer, tokenizer, texts, max_token_len=1024,
         current_blocks = [b["text"] for b in compressed]
         current_depth += 1
 
+        # ✅ 若已压缩到只剩 1 条且 token 不超长，可终止递归
+        merged = "\n".join(current_blocks)
+        if len(current_blocks) == 1 and len(tokenizer(merged)["input_ids"]) <= max_token_len:
+            break
+
     final_summary = current_blocks[0] if current_blocks else ""
     return final_summary, hierarchy, current_depth
 
@@ -87,7 +93,27 @@ def summarize_recursive(req: SummarizationRequest):
 
     # 并行处理第一层段落
     def summarize_one(para):
-        return summarizer(para, max_length=256, min_length=30, do_sample=req.do_sample)[0]["summary_text"]
+        tokens = tokenizer(para)["input_ids"]
+        chunk_size = 400
+        chunks = []
+
+        for i in range(0, len(tokens), chunk_size):
+            chunk = tokens[i:i+chunk_size]
+            text_chunk = tokenizer.decode(chunk, skip_special_tokens=True)
+            chunks.append(text_chunk.strip())
+
+        # 对多个 chunk 分别摘要，再合并成一级摘要结果
+        summaries = []
+        for chunk in chunks:
+            try:
+                out = summarizer(chunk, max_length=256, min_length=30, do_sample=req.do_sample)
+                summaries.append(out[0]["summary_text"])
+            except Exception as e:
+                print(f"[ERROR] summarize_one chunk failed: {e}")
+                continue
+
+        return "\n".join(summaries)
+
 
     with ThreadPoolExecutor(max_workers=min(len(paragraphs), os.cpu_count() or 4)) as executor:
         level1_summaries = list(executor.map(summarize_one, paragraphs))

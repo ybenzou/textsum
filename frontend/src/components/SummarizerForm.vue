@@ -34,11 +34,10 @@
     <div v-if="result?.hierarchy?.length" class="space-y-6 mt-6">
       <!-- Final summary -->
       <div class="bg-green-100 border border-green-500 p-4 rounded shadow">
-        <h2 class="text-xl font-bold mb-2">✅ Final Summary (Level {{ result.depth + 1 }})</h2>
+        <h2 class="text-xl font-bold mb-2">✅ Final Summary (Level {{ result.depth }})</h2>
         <p class="whitespace-pre-line text-gray-800">{{ result.summary }}</p>
       </div>
 
-      <!-- 倒序层级展示 -->
       <!-- 倒序层级展示 -->
       <div
         v-for="(level, index) in result.hierarchy.slice().reverse()"
@@ -67,11 +66,11 @@
             >
               <p class="text-sm text-gray-500 font-semibold">Derived from:</p>
               <div class="space-y-2">
-                <div
-                  v-for="srcIdx in block.sources"
-                  :key="'conn-' + srcIdx"
-                  class="rounded-md bg-gray-100 border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm"
-                >
+                  <div
+                    v-for="srcIdx in block.sources"
+                    :key="'conn-' + srcIdx"
+                    class="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-900 shadow-sm"
+                  >
                   {{ getPreviousSummary(result.hierarchy.length - 1 - index, srcIdx) }}
                 </div>
               </div>
