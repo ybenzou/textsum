@@ -1,0 +1,13 @@
+# Python 缓存文件
+__pycache__/
+*.py[cod]
+*.log
+
+# Node 构建和缓存
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+
+# Git & macOS垃圾
+.git/
+*.DS_Store

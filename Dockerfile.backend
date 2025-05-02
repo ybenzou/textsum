@@ -1,11 +1,16 @@
-FROM python:3.10-slim
+# Backend Dockerfile
+FROM python:3.11-slim AS backend
 
 WORKDIR /app
 
+# 安装依赖
 COPY backend/requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend /app
+# 拷贝 Python 应用逻辑
+COPY backend/ ./backend/
+COPY download_model.py .
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 模型由 volume 挂载，不需要 COPY
+
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,21 +1,20 @@
-version: "3.9"
-
 services:
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    container_name: summarizer-backend
     ports:
       - "8000:8000"
     volumes:
-      - ./model:/app/model
-      - ./data:/app/data
-    restart: always
+      - ./model:/app/model  # 模型挂载为 volume，避免 COPY 占用镜像空间
+    restart: unless-stopped
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+    container_name: summarizer-frontend
     ports:
-      - "3000:3000"
-    restart: always
+      - "80:80"
+    restart: unless-stopped
