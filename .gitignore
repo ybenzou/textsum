@@ -2,5 +2,5 @@
 model.safetensors
 
 # 或者明确忽略路径
-model/**
+model/t5_small/**
 t5_small/**

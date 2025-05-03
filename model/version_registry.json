@@ -1,0 +1,13 @@
+{
+  "default_model": "t5_small",
+  "models": {
+    "t5_small": {
+      "description": "Faster T5-small model for summarization",
+      "path": "model/t5_small"
+    },
+    "bart_base": {
+      "description": "Pretrained BART model (facebook/bart-large-cnn)",
+      "path": "model/base_model"
+    }
+  }
+}

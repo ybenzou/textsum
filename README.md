@@ -31,3 +31,6 @@ A fully containerized, modular text summarization system designed for **private 
     ├── Inference Pipeline Wrapper
     ├── Fine-tuning Logs
     └── Model Version Registry
+
+1. python download_model.py --model t5-small --out model/t5_small
+2. docker compose up
