@@ -4,6 +4,7 @@ from .model_loader import load_model
 from transformers import AutoTokenizer
 from concurrent.futures import ThreadPoolExecutor
 import os, json
+from fastapi import Request
 
 router = APIRouter()
 model_cache = {}
@@ -11,9 +12,34 @@ tokenizer_cache = {}
 
 # 模型注册表路径
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-REGISTRY_PATH = os.path.join(BASE_DIR, "model/version_registry.json")
-with open(REGISTRY_PATH, "r") as f:
-    MODEL_REGISTRY = json.load(f)["models"]
+
+def discover_models():
+    model_dir = os.path.join(BASE_DIR, "model")
+    registry_path = os.path.join(model_dir, "version_registry.json")
+
+    # 加载 version_registry.json（如果存在）
+    try:
+        with open(registry_path, "r") as f:
+            registered = json.load(f).get("models", {})
+    except Exception:
+        registered = {}
+
+    # 自动扫描 model 目录
+    all_models = {}
+    for name in os.listdir(model_dir):
+        path = os.path.join(model_dir, name)
+        if os.path.isdir(path):
+            if name in registered:
+                all_models[name] = registered[name]
+            else:
+                all_models[name] = {
+                    "path": f"model/{name}",
+                    "description": "Unregistered model (discovered from filesystem)"
+                }
+    return all_models
+
+MODEL_REGISTRY = discover_models()
+
 
 def get_model_and_tokenizer(model_name: str):
     if model_name not in model_cache:
@@ -132,3 +158,13 @@ def summarize_recursive(req: SummarizationRequest):
 @router.get("/models")
 def list_models():
     return {"models": list(MODEL_REGISTRY.keys())}
+
+
+@router.post("/refresh_models")
+def refresh_models(request: Request):
+    global MODEL_REGISTRY
+    MODEL_REGISTRY = discover_models()
+    # 清理缓存（可选）
+    model_cache.clear()
+    tokenizer_cache.clear()
+    return {"message": "Model registry refreshed", "models": list(MODEL_REGISTRY.keys())}

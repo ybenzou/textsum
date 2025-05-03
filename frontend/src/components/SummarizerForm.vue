@@ -3,10 +3,27 @@
     <!-- 模型选择 -->
     <div class="space-y-2">
       <label class="block text-sm font-semibold text-gray-600">🧠 Select Model:</label>
-      <select v-model="selectedModel" class="p-2 border rounded">
+      <select v-model="selectedModel" class="p-2 border rounded" :disabled="models.length === 0">
+        <option v-if="models.length === 0" disabled>🔍 No models found. Click refresh below.</option>
         <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
       </select>
+
+      <button
+        @click="refreshModels"
+        :disabled="refreshing"
+        class="mt-2 bg-white border border-blue-500 text-blue-600 px-4 py-1.5 rounded-md hover:bg-blue-50 transition duration-150 ease-in-out text-sm disabled:opacity-50"
+      >
+        {{ refreshing ? "🔄 Refreshing..." : "🔄 Refresh Model List" }}
+      </button>
+
+
+      <!-- 简单提示反馈 -->
+      <p v-if="refreshMessage" class="text-sm mt-1 text-gray-600">
+        {{ refreshMessage }}
+      </p>
+
     </div>
+
 
     <!-- 上传 PDF -->
     <div class="space-y-2">
@@ -95,6 +112,8 @@ const loading = ref(false)
 const error = ref(null)
 const selectedModel = ref('t5_small')
 const models = ref([])
+const refreshing = ref(false)
+const refreshMessage = ref('')
 
 onMounted(async () => {
   try {
@@ -107,6 +126,26 @@ onMounted(async () => {
     console.error('Failed to fetch model list:', err)
   }
 })
+
+async function refreshModels() {
+  refreshing.value = true
+  refreshMessage.value = ''
+  try {
+    await axios.post('http://localhost:8000/refresh_models')
+    const res = await axios.get('http://localhost:8000/models')
+    models.value = res.data.models
+    if (!selectedModel.value && models.value.length) {
+      selectedModel.value = models.value[0]
+    }
+    refreshMessage.value = '✅ Model list refreshed.'
+  } catch (err) {
+    console.error('Failed to refresh model list:', err)
+    refreshMessage.value = '❌ Refresh failed.'
+  } finally {
+    refreshing.value = false
+  }
+}
+
 
 async function handlePDFUpload(event) {
   const file = event.target.files[0]
