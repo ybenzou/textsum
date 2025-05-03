@@ -1,14 +1,17 @@
 <template>
   <div class="space-y-6 max-w-5xl mx-auto p-6">
+    <!-- 模型选择 -->
+    <div class="space-y-2">
+      <label class="block text-sm font-semibold text-gray-600">🧠 Select Model:</label>
+      <select v-model="selectedModel" class="p-2 border rounded">
+        <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
+      </select>
+    </div>
+
     <!-- 上传 PDF -->
     <div class="space-y-2">
       <label class="block text-sm font-semibold text-gray-600">📄 Upload PDF:</label>
-      <input
-        type="file"
-        accept="application/pdf"
-        @change="handlePDFUpload"
-        class="block"
-      />
+      <input type="file" accept="application/pdf" @change="handlePDFUpload" class="block" />
     </div>
 
     <!-- 输入框 -->
@@ -32,13 +35,11 @@
 
     <!-- 展示结果 -->
     <div v-if="result?.hierarchy?.length" class="space-y-6 mt-6">
-      <!-- Final summary -->
       <div class="bg-green-100 border border-green-500 p-4 rounded shadow">
         <h2 class="text-xl font-bold mb-2">✅ Final Summary (Level {{ result.depth }})</h2>
         <p class="whitespace-pre-line text-gray-800">{{ result.summary }}</p>
       </div>
 
-      <!-- 倒序层级展示 -->
       <div
         v-for="(level, index) in result.hierarchy.slice().reverse()"
         :key="'level-' + index"
@@ -54,23 +55,21 @@
             :key="'block-' + blockIdx"
             class="bg-white border border-gray-200 p-5 rounded-xl shadow-sm"
           >
-            <!-- 当前摘要 -->
             <div class="text-gray-900 text-base leading-relaxed font-medium">
               {{ typeof block === 'string' ? block : block.text }}
             </div>
 
-            <!-- 来源引用（简约风格） -->
             <div
               v-if="typeof block !== 'string' && block.sources && (result.hierarchy.length - 1 - index) > 0"
               class="mt-4 space-y-2"
             >
               <p class="text-sm text-gray-500 font-semibold">Derived from:</p>
               <div class="space-y-2">
-                  <div
-                    v-for="srcIdx in block.sources"
-                    :key="'conn-' + srcIdx"
-                    class="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-900 shadow-sm"
-                  >
+                <div
+                  v-for="srcIdx in block.sources"
+                  :key="'conn-' + srcIdx"
+                  class="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-900 shadow-sm"
+                >
                   {{ getPreviousSummary(result.hierarchy.length - 1 - index, srcIdx) }}
                 </div>
               </div>
@@ -83,22 +82,32 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 import Worker from 'pdfjs-dist/legacy/build/pdf.worker?worker'
 
-// 设置 worker 运行时（仅 Vite）
 pdfjsLib.GlobalWorkerOptions.workerPort = new Worker()
-
-
 
 const inputText = ref('')
 const result = ref(null)
 const loading = ref(false)
 const error = ref(null)
+const selectedModel = ref('t5_small')
+const models = ref([])
 
-// PDF 上传处理
+onMounted(async () => {
+  try {
+    const res = await axios.get('http://localhost:8000/models')
+    models.value = res.data.models
+    if (!selectedModel.value && models.value.length) {
+      selectedModel.value = models.value[0]
+    }
+  } catch (err) {
+    console.error('Failed to fetch model list:', err)
+  }
+})
+
 async function handlePDFUpload(event) {
   const file = event.target.files[0]
   if (!file) return
@@ -107,21 +116,15 @@ async function handlePDFUpload(event) {
     const reader = new FileReader()
     reader.onload = async function () {
       const typedArray = new Uint8Array(reader.result)
-
       const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise
-      const maxPages = pdf.numPages
       let textContent = ''
-
-      for (let i = 1; i <= maxPages; i++) {
+      for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i)
         const content = await page.getTextContent()
-        const strings = content.items.map((item) => item.str)
-        textContent += strings.join(' ') + '\n\n'
+        textContent += content.items.map((item) => item.str).join(' ') + '\n\n'
       }
-
       inputText.value = textContent.trim()
     }
-
     reader.readAsArrayBuffer(file)
   } catch (err) {
     console.error('PDF extraction failed:', err)
@@ -129,7 +132,6 @@ async function handlePDFUpload(event) {
   }
 }
 
-// 发起摘要请求
 async function summarize() {
   loading.value = true
   error.value = null
@@ -137,7 +139,8 @@ async function summarize() {
 
   try {
     const res = await axios.post('http://localhost:8000/summarize_recursive', {
-      text: inputText.value
+      text: inputText.value,
+      model_name: selectedModel.value
     })
     result.value = res.data
   } catch (err) {
@@ -147,7 +150,6 @@ async function summarize() {
   }
 }
 
-// 获取上一层摘要内容
 function getPreviousSummary(levelIdx, sourceIdx) {
   const prevLevel = result.value.hierarchy[levelIdx - 1]
   const src = prevLevel?.[sourceIdx]

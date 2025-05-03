@@ -33,4 +33,5 @@ A fully containerized, modular text summarization system designed for **private 
     └── Model Version Registry
 
 1. python download_model.py --model t5-small --out model/t5_small
+(python download_model.py --model sshleifer/distilbart-cnn-12-6 --out model/distilbart_cnn)
 2. docker compose up

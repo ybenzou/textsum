@@ -5,9 +5,9 @@
       "description": "Faster T5-small model for summarization",
       "path": "model/t5_small"
     },
-    "bart_base": {
-      "description": "Pretrained BART model (facebook/bart-large-cnn)",
-      "path": "model/base_model"
+    "distilbart_cnn": {
+      "description": "Local model: sshleifer/distilbart-cnn-12-6",
+      "path": "model/distilbart_cnn"
     }
   }
 }

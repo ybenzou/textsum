@@ -128,3 +128,7 @@ def summarize_recursive(req: SummarizationRequest):
         depth=depth,
         hierarchy=hierarchy
     )
+
+@router.get("/models")
+def list_models():
+    return {"models": list(MODEL_REGISTRY.keys())}
